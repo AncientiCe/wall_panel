@@ -147,4 +147,8 @@ Run `make_fonts.sh` after a first `pio run`, because it takes the TTF files from
 - Geolocation by [ip-api.com](https://ip-api.com) (free for non-commercial use).
 - Horoscopes from [freehoroscopeapi.com](https://freehoroscopeapi.com). It only provides today's reading; its "tomorrow" option returns the same text.
 
-The logo in `assets/` and `src/assets/` belongs to its owner and is not covered by any license for this code.
+## License
+
+The code is under the [MIT License](LICENSE), with two exclusions:
+- **The "iCe" logo** (`assets/logo.png`, `src/assets/img_logo.c`) is not covered and all rights are reserved. To reuse the project, swap in your own logo with `tools/make_logo.py`.
+- **The generated fonts** in `src/fonts/` keep their original licenses (see above).
