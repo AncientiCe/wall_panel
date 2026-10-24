@@ -1,0 +1,5 @@
+.pio/
+.impact/
+.vscode/
+include/secrets.h
+backup/
