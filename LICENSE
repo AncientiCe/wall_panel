@@ -19,16 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-Exclusions
-
-The "iCe" logo (assets/logo.png and its converted form src/assets/img_logo.c)
-is not covered by this license. All rights to the logo are reserved by its
-owner. To reuse this project, replace the logo with your own and regenerate
-src/assets/img_logo.c with tools/make_logo.py.
-
-The generated font files in src/fonts/ are derived from Montserrat (SIL Open
-Font License 1.1) and Font Awesome Free 5 (icons CC BY 4.0, font SIL OFL 1.1)
-and remain under those licenses.

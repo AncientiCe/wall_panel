@@ -149,6 +149,6 @@ Run `make_fonts.sh` after a first `pio run`, because it takes the TTF files from
 
 ## License
 
-The code is under the [MIT License](LICENSE), with two exclusions:
+The code is under the [MIT License](LICENSE), with two exclusions (also listed in [NOTICE](NOTICE)):
 - **The "iCe" logo** (`assets/logo.png`, `src/assets/img_logo.c`) is not covered and all rights are reserved. To reuse the project, swap in your own logo with `tools/make_logo.py`.
 - **The generated fonts** in `src/fonts/` keep their original licenses (see above).
