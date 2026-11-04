@@ -107,12 +107,12 @@ struct Settings
   bool nightAtSunset;  // start night mode at sunset instead of nightStart
   int nightStart;     // minutes after midnight
   int nightEnd;
-  int nightBrightness; // percent, 80-100, backlight while idle at night (RAM only)
+  int nightBrightness; // percent, 70-100, backlight while idle at night (RAM only)
 };
 
 void netBegin();
 void netGetSettings(Settings &out);
-// Night backlight percent (80-100). Held in RAM only; reset to 80 when day/night flips.
+// Night backlight percent (70-100). Held in RAM only; reset to 70 when day/night flips.
 void netSetNightBrightness(int pct);
 void netGetStatus(NetStatus &out);
 int netGetScan(ScanEntry *out, int max);

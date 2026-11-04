@@ -1,5 +1,5 @@
 // Backlight and night mode. At night the backlight sits at the night
-// brightness setting (80-100%) whether or not the screen is touched.
+// brightness setting (70-100%) whether or not the screen is touched.
 #pragma once
 #include <stdint.h>
 

@@ -1844,9 +1844,9 @@ static void buildWifi()
   sliderNight = lv_slider_create(scrWifi);
   lv_obj_set_pos(sliderNight, 32, 192);
   lv_obj_set_size(sliderNight, 416, 14);
-  lv_slider_set_range(sliderNight, 80, 100);
-  lv_slider_set_value(sliderNight, 80, LV_ANIM_OFF);
-  showNightPct(80);
+  lv_slider_set_range(sliderNight, 70, 100);
+  lv_slider_set_value(sliderNight, 70, LV_ANIM_OFF);
+  showNightPct(70);
   lv_obj_set_ext_click_area(sliderNight, 16);
   lv_obj_add_event_cb(sliderNight, [](lv_event_t *e) {
     int v = lv_slider_get_value(lv_event_get_target(e));
