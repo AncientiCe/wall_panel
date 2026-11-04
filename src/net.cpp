@@ -75,6 +75,7 @@ static void loadSettings()
   s.nightAtSunset = prefs.getBool("nightSunset", true);
   s.nightStart = prefs.getInt("nightStart", 20 * 60 + 30);
   s.nightEnd = prefs.getInt("nightEnd", 6 * 60 + 30);
+  s.nightBrightness = constrain(prefs.getInt("nightBright", 10), 1, 100);
   portENTER_CRITICAL(&mux);
   settings = s;
   portEXIT_CRITICAL(&mux);
@@ -564,6 +565,9 @@ static void handleRoot()
       "<label>Night mode ends</label>"
       "<input type=text name=nightEnd size=5 value=" + hhmm(s.nightEnd) + ">"
       "<small>HH:MM. A fixed start equal to the end turns night mode off.</small>"
+      "<label>Night brightness (%)</label>"
+      "<input type=number name=nightBright min=1 max=100 value=" + String(s.nightBrightness) + ">"
+      "<small>Backlight while idle at night. 100 is full daytime brightness.</small>"
       "<br><button>Save</button></form></body></html>";
   server.send(200, "text/html", page);
 }
@@ -590,6 +594,7 @@ static void handleSave()
   prefs.putBool("nightSunset", server.arg("nightMode") != "fixed");
   prefs.putInt("nightStart", parseHhmm(server.arg("nightStart"), s.nightStart));
   prefs.putInt("nightEnd", parseHhmm(server.arg("nightEnd"), s.nightEnd));
+  prefs.putInt("nightBright", constrain(server.arg("nightBright").toInt(), 1, 100));
   loadSettings();
 
   Cmd cmd = {CmdType::RefreshCalendar};

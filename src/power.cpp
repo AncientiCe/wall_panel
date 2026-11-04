@@ -1,12 +1,12 @@
 #include "power.h"
 #include <Arduino.h>
+#include "net.h"
 
 #define PIN_BL 38
 #define BL_CHANNEL 0
 
 #define LEVEL_DAY 255
 #define LEVEL_NIGHT 40
-#define LEVEL_NIGHT_IDLE 6 // faint glow instead of fully black
 #define NIGHT_AWAKE_MS 30000
 
 static int level = -1;
@@ -62,7 +62,9 @@ void powerUpdate(bool night)
   }
   else
   {
+    Settings s;
+    netGetSettings(s);
     screenOff = true;
-    setLevel(LEVEL_NIGHT_IDLE);
+    setLevel(max(1, s.nightBrightness * 255 / 100));
   }
 }
