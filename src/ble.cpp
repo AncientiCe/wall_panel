@@ -28,6 +28,8 @@ struct Sensor
   int16_t histH[BLE_HIST_LEN];
   int histHead; // index of the next slot to write
   uint32_t lastHistMs;
+  uint32_t loadEpoch; // wall-clock time the saved history ended, until the gap since then is filled
+  bool dirty;         // history changed since it was last saved
 };
 
 static Sensor *sensors; // BLE_MAX_SENSORS, in PSRAM
@@ -101,6 +103,53 @@ static void loadNameFor(Sensor &s)
   strlcpy(s.name, n.c_str(), sizeof(s.name));
 }
 
+// History survives reboots: saved to NVS every BLE_SAVE_MS and reloaded at
+// boot. The time since the last save is filled in as gaps once the clock is set.
+#define BLE_SAVE_MS (30UL * 60 * 1000)
+
+struct HistMeta
+{
+  uint32_t epoch; // 0 when the clock was not set at save time
+  uint16_t head;
+};
+
+static void histKey(char prefix, const Sensor &s, char *key)
+{
+  char k[13];
+  macKey(s.mac, k);
+  snprintf(key, 16, "%c_%s", prefix, k);
+}
+
+static void loadHistory(Sensor &s)
+{
+  char kt[16], kh[16], km[16];
+  histKey('t', s, kt);
+  histKey('h', s, kh);
+  histKey('m', s, km);
+  HistMeta m;
+  if (prefs.getBytesLength(kt) != sizeof(s.histT) || prefs.getBytesLength(kh) != sizeof(s.histH) ||
+      prefs.getBytes(km, &m, sizeof(m)) != sizeof(m) || m.head >= BLE_HIST_LEN)
+    return;
+  prefs.getBytes(kt, s.histT, sizeof(s.histT));
+  prefs.getBytes(kh, s.histH, sizeof(s.histH));
+  s.histHead = m.head;
+  s.loadEpoch = m.epoch;
+}
+
+static void saveHistory(Sensor &s)
+{
+  char kt[16], kh[16], km[16];
+  histKey('t', s, kt);
+  histKey('h', s, kh);
+  histKey('m', s, km);
+  time_t now = time(nullptr);
+  HistMeta m = {now > 1700000000 ? (uint32_t)now : 0, (uint16_t)s.histHead};
+  prefs.putBytes(kt, s.histT, sizeof(s.histT));
+  prefs.putBytes(kh, s.histH, sizeof(s.histH));
+  prefs.putBytes(km, &m, sizeof(m));
+  s.dirty = false;
+}
+
 static Sensor *findLocked(const char *mac)
 {
   for (int i = 0; i < sensorCount; i++)
@@ -124,6 +173,7 @@ static Sensor *addLocked(const char *mac)
     s.histH[i] = BLE_HIST_EMPTY;
   }
   loadNameFor(s);
+  loadHistory(s);
   return &s;
 }
 
@@ -189,11 +239,34 @@ class ScanCallbacks : public NimBLEAdvertisedDeviceCallbacks
 // gaps show up as gaps.
 static void recordHistory()
 {
+  static uint32_t lastSave = 0;
   uint32_t now = millis();
+  time_t wall = time(nullptr);
+  bool clockSet = wall > 1700000000;
   xSemaphoreTake(lock, portMAX_DELAY);
   for (int i = 0; i < sensorCount; i++)
   {
     Sensor &s = sensors[i];
+    if (s.loadEpoch)
+    {
+      if (clockSet)
+      {
+        // Fill the time the panel was off as gaps.
+        long steps = ((long)wall - (long)s.loadEpoch) / BLE_HIST_STEP_S;
+        steps = constrain(steps, 0L, (long)BLE_HIST_LEN);
+        for (long k = 0; k < steps; k++)
+        {
+          s.histT[s.histHead] = BLE_HIST_EMPTY;
+          s.histH[s.histHead] = BLE_HIST_EMPTY;
+          s.histHead = (s.histHead + 1) % BLE_HIST_LEN;
+        }
+        s.loadEpoch = 0;
+      }
+      else if (now < 10UL * 60 * 1000)
+        continue; // wait for the clock before adding new points
+      else
+        s.loadEpoch = 0; // no clock after 10 minutes: carry on without gap-filling
+    }
     if (s.lastHistMs && now - s.lastHistMs < BLE_HIST_STEP_S * 1000UL)
       continue;
     if (!s.hasReading && !s.lastHistMs)
@@ -203,6 +276,14 @@ static void recordHistory()
     s.histT[s.histHead] = fresh ? (int16_t)lroundf(s.temp * 10) : BLE_HIST_EMPTY;
     s.histH[s.histHead] = fresh ? (int16_t)lroundf(s.humidity * 10) : BLE_HIST_EMPTY;
     s.histHead = (s.histHead + 1) % BLE_HIST_LEN;
+    s.dirty = true;
+  }
+  if (now - lastSave > BLE_SAVE_MS)
+  {
+    lastSave = now;
+    for (int i = 0; i < sensorCount; i++)
+      if (sensors[i].dirty)
+        saveHistory(sensors[i]);
   }
   xSemaphoreGive(lock);
 }
