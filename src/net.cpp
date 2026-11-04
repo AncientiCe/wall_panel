@@ -75,7 +75,7 @@ static void loadSettings()
   s.nightAtSunset = prefs.getBool("nightSunset", true);
   s.nightStart = prefs.getInt("nightStart", 20 * 60 + 30);
   s.nightEnd = prefs.getInt("nightEnd", 6 * 60 + 30);
-  // Not saved: a change holds until the next sunrise/sunset, then resets to 80.
+  // Not saved: a change holds until the next sunrise/sunset, then resets to 60.
   s.nightBrightness = settings.nightBrightness ? settings.nightBrightness : 60;
   portENTER_CRITICAL(&mux);
   settings = s;

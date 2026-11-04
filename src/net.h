@@ -112,7 +112,7 @@ struct Settings
 
 void netBegin();
 void netGetSettings(Settings &out);
-// Night backlight percent (70-100). Held in RAM only; reset to 60 when day/night flips.
+// Night backlight percent (60-100). Held in RAM only; reset to 60 when day/night flips.
 void netSetNightBrightness(int pct);
 void netGetStatus(NetStatus &out);
 int netGetScan(ScanEntry *out, int max);

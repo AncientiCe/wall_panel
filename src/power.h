@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 void powerBegin();
-// Called by the touch driver with the raw pressed state. Returns true when
-// the touch must not reach LVGL (it woke the screen).
+// Called by the touch driver with the raw pressed state. Returns true when the
+// touch must not reach LVGL. Always false now: the screen never goes dark.
 bool powerOnTouch(bool pressed);
 void powerUpdate(bool night);
