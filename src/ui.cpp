@@ -1746,8 +1746,16 @@ static void buildMain()
 
 // ---- Wi-Fi setup ----
 
+static lv_obj_t *sliderNight, *lblNight;
+
+static void showNightPct(int pct) { lv_label_set_text_fmt(lblNight, "Night brightness  %d%%", pct); }
+
 static void openWifi()
 {
+  Settings cur;
+  netGetSettings(cur);
+  lv_slider_set_value(sliderNight, cur.nightBrightness, LV_ANIM_OFF);
+  showNightPct(cur.nightBrightness);
   lv_scr_load(scrWifi);
   netRequestScan();
 }
@@ -1817,7 +1825,7 @@ static void buildWifi()
 {
   scrWifi = makeScreen();
 
-  lv_obj_t *title = makeLabel(scrWifi, &lv_font_montserrat_32, COL_TEXT, "Wi-Fi");
+  lv_obj_t *title = makeLabel(scrWifi, &lv_font_montserrat_32, COL_TEXT, "Settings");
   lv_obj_set_pos(title, 22, 18);
   lblWifiStatus = makeLabel(scrWifi, &font_text_16, COL_MUTED, "");
   lv_obj_set_pos(lblWifiStatus, 24, 62);
@@ -1831,9 +1839,24 @@ static void buildWifi()
   lv_obj_t *btnBack = makeButton(scrWifi, LV_SYMBOL_LEFT " Back", 140, 50, [](lv_event_t *) { showHome(); });
   lv_obj_set_pos(btnBack, 324, 94);
 
+  lblNight = makeLabel(scrWifi, &font_text_16, COL_MUTED, "");
+  lv_obj_set_pos(lblNight, 24, 156);
+  sliderNight = lv_slider_create(scrWifi);
+  lv_obj_set_pos(sliderNight, 32, 192);
+  lv_obj_set_size(sliderNight, 416, 14);
+  lv_slider_set_range(sliderNight, 80, 100);
+  lv_slider_set_value(sliderNight, 80, LV_ANIM_OFF);
+  showNightPct(80);
+  lv_obj_set_ext_click_area(sliderNight, 16);
+  lv_obj_add_event_cb(sliderNight, [](lv_event_t *e) {
+    int v = lv_slider_get_value(lv_event_get_target(e));
+    showNightPct(v);
+    netSetNightBrightness(v);
+  }, LV_EVENT_VALUE_CHANGED, nullptr);
+
   listNets = lv_list_create(scrWifi);
-  lv_obj_set_pos(listNets, 16, 156);
-  lv_obj_set_size(listNets, 448, 308);
+  lv_obj_set_pos(listNets, 16, 228);
+  lv_obj_set_size(listNets, 448, 236);
   lv_obj_set_style_bg_color(listNets, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_bg_opa(listNets, 16, 0);
   lv_obj_set_style_border_width(listNets, 0, 0);
