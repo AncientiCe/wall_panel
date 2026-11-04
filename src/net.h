@@ -4,6 +4,10 @@
 #pragma once
 #include <Arduino.h>
 
+// Set to 1 to bring back the calendar: its fetch, the Calendar page and the
+// "Up next" card on Home. Off for now; the saved calendar URL is kept.
+#define CALENDAR_ENABLED 0
+
 #define WX_HOURS 12
 #define WX_DAYS 5
 

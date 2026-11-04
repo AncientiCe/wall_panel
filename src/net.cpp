@@ -823,7 +823,7 @@ static void netTask(void *)
       lastWeather = millis();
     }
 
-    if (lastCalendar == 0 || millis() - lastCalendar > CALENDAR_PERIOD_MS)
+    if (CALENDAR_ENABLED && (lastCalendar == 0 || millis() - lastCalendar > CALENDAR_PERIOD_MS))
     {
       fetchCalendar();
       lastCalendar = millis();
@@ -862,7 +862,7 @@ void netBegin()
   freshEvents = (CalEvent *)ps_malloc(sizeof(CalEvent) * MAX_EVENTS);
   horoscopes = (Horoscope *)ps_malloc(sizeof(Horoscope) * ZODIAC_COUNT);
   status.wifi = WifiState::Connecting;
-  status.calendar = settings.calendarUrl[0] ? CalState::Loading : CalState::NotSet;
+  status.calendar = CALENDAR_ENABLED && settings.calendarUrl[0] ? CalState::Loading : CalState::NotSet;
   cmdQueue = xQueueCreate(6, sizeof(Cmd));
   xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 1, nullptr, 0);
 }
