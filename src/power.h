@@ -1,5 +1,5 @@
 // Backlight and night mode. At night the screen dims after a touch and
-// switches off when idle; the touch that wakes it is swallowed so it
+// drops to a faint glow when idle; the touch that wakes it is swallowed so it
 // doesn't also press a button.
 #pragma once
 #include <stdint.h>

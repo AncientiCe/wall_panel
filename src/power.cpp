@@ -6,6 +6,7 @@
 
 #define LEVEL_DAY 255
 #define LEVEL_NIGHT 40
+#define LEVEL_NIGHT_IDLE 6 // faint glow instead of fully black
 #define NIGHT_AWAKE_MS 30000
 
 static int level = -1;
@@ -62,6 +63,6 @@ void powerUpdate(bool night)
   else
   {
     screenOff = true;
-    setLevel(0);
+    setLevel(LEVEL_NIGHT_IDLE);
   }
 }
