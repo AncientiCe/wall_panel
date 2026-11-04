@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - Sensors page for Holyiot BLE temperature and humidity beacons: temperature, humidity, signal, last-heard time and a light bulb that stays lit for a minute after the beacon's button is pressed. The panel listens for 6 seconds every 30 seconds.
-- Tap a sensor for a 1 hour, 6 hour or 24 hour history graph, and rename it with the on-screen keyboard (names are saved on the panel). History is kept in memory only.
+- Tap a sensor for a 1 hour, 6 hour or 24 hour history graph, and rename it with the on-screen keyboard (names are saved on the panel). History is saved every 30 minutes and survives reboots; the time the panel was off shows as a gap.
+- Home shows the sensors in an "At home" card that switches between them every 6 seconds. It takes the place of "Up next" while the calendar is off.
 
 ### Changed
 

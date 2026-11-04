@@ -497,6 +497,8 @@ static void checkNotifications(const Weather &w, bool night)
 
 // ---- home ----
 
+static void buildHomeSensors(lv_obj_t *t);
+
 static void buildHome(lv_obj_t *t)
 {
   lblTime = makeLabel(t, &font_clock_120, COL_TEXT, "--:--");
@@ -531,6 +533,7 @@ static void buildHome(lv_obj_t *t)
   lv_obj_t *next = makeCard(t, 16, 282, 448, 182);
 #if !CALENDAR_ENABLED
   lv_obj_add_flag(next, LV_OBJ_FLAG_HIDDEN);
+  buildHomeSensors(t); // takes the place of "Up next" while the calendar is off
 #endif
   makeCaption(next, "UP NEXT");
   for (int i = 0; i < NEXT_ROWS; i++)
@@ -1525,6 +1528,106 @@ static void buildName()
   lv_obj_add_event_cb(kb, nameKeyboardEvent, LV_EVENT_ALL, nullptr);
 }
 
+// ---- home carousel ----
+
+// While the calendar is off, Home shows the sensors one at a time, switching
+// every few seconds. Hidden until a sensor has been heard.
+#define CAROUSEL_MS 6000
+static lv_obj_t *carCard, *carBox, *carName, *carTemp, *carHum, *carCount;
+static SensRow carBulb; // only globe and base are used
+static int carIdx = 0;
+static uint32_t carLast = 0;
+
+static void buildHomeSensors(lv_obj_t *t)
+{
+  carCard = makeCard(t, 16, 282, 448, 182);
+  lv_obj_add_flag(carCard, LV_OBJ_FLAG_HIDDEN);
+  makeCaption(carCard, "AT HOME");
+  carCount = makeLabel(carCard, &font_text_14, COL_DIM, "");
+  lv_obj_align(carCount, LV_ALIGN_TOP_RIGHT, 0, 0);
+
+  carBox = lv_obj_create(carCard);
+  lv_obj_remove_style_all(carBox);
+  lv_obj_set_pos(carBox, 0, 26);
+  lv_obj_set_size(carBox, 420, 128);
+  lv_obj_clear_flag(carBox, LV_OBJ_FLAG_CLICKABLE);
+
+  carName = makeLabel(carBox, &font_text_24, COL_TEXT, "");
+  lv_obj_set_pos(carName, 0, 4);
+  oneLine(carName, 360);
+  carTemp = makeLabel(carBox, &lv_font_montserrat_48, COL_TEXT, "");
+  lv_obj_set_pos(carTemp, 0, 56);
+  carHum = makeLabel(carBox, &lv_font_montserrat_48, COL_ACCENT, "");
+  lv_obj_align(carHum, LV_ALIGN_TOP_RIGHT, 0, 56);
+
+  carBulb.globe = lv_obj_create(carBox);
+  lv_obj_remove_style_all(carBulb.globe);
+  lv_obj_set_size(carBulb.globe, 22, 22);
+  lv_obj_align(carBulb.globe, LV_ALIGN_TOP_RIGHT, -4, 0);
+  lv_obj_set_style_radius(carBulb.globe, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_shadow_color(carBulb.globe, lv_color_hex(COL_SUN), 0);
+  lv_obj_set_style_shadow_opa(carBulb.globe, 190, 0);
+  carBulb.base = lv_obj_create(carBox);
+  lv_obj_remove_style_all(carBulb.base);
+  lv_obj_set_size(carBulb.base, 12, 7);
+  lv_obj_align(carBulb.base, LV_ALIGN_TOP_RIGHT, -9, 24);
+  lv_obj_set_style_radius(carBulb.base, 3, 0);
+  setBulb(carBulb, false);
+}
+
+static void carFadeIn()
+{
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, carBox);
+  lv_anim_set_values(&a, 0, 255);
+  lv_anim_set_time(&a, 400);
+  lv_anim_set_exec_cb(&a, [](void *o, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)o, (lv_opa_t)v, 0); });
+  lv_anim_start(&a);
+}
+
+// Called with the fresh sensor list every couple of seconds.
+static void updateCarousel()
+{
+  if (!carCard)
+    return;
+  int shown = 0;
+  int pick[BLE_MAX_SENSORS];
+  for (int i = 0; i < sensCount; i++)
+    if (sensInfo[i].hasReading)
+      pick[shown++] = i;
+  if (!shown)
+  {
+    lv_obj_add_flag(carCard, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  lv_obj_clear_flag(carCard, LV_OBJ_FLAG_HIDDEN);
+
+  bool advance = millis() - carLast >= CAROUSEL_MS;
+  if (advance)
+  {
+    carLast = millis();
+    if (shown > 1)
+      carIdx++;
+  }
+  carIdx %= shown;
+  const SensorInfo &s = sensInfo[pick[carIdx]];
+
+  char name[32], tt[16];
+  displayName(s, name, sizeof(name));
+  fmtTenths(tt, sizeof(tt), (int)lroundf(s.temp * 10));
+  lv_label_set_text(carName, name);
+  lv_label_set_text_fmt(carTemp, "%s°", tt);
+  lv_label_set_text_fmt(carHum, "%d%%", (int)lroundf(s.humidity));
+  if (shown > 1)
+    lv_label_set_text_fmt(carCount, "%d / %d", carIdx + 1, shown);
+  else
+    lv_label_set_text(carCount, "");
+  setBulb(carBulb, s.pressedRecently);
+  if (advance && shown > 1)
+    carFadeIn();
+}
+
 static void updateSensors()
 {
   static uint32_t last = 0, lastDetail = 0;
@@ -1569,6 +1672,7 @@ static void updateSensors()
     lv_obj_set_style_text_color(r.hum, lv_color_hex(stale ? COL_DIM : COL_ACCENT), 0);
     setBulb(r, s.pressedRecently);
   }
+  updateCarousel();
   if (sensCount)
     lv_obj_add_flag(sensEmpty, LV_OBJ_FLAG_HIDDEN);
   else
