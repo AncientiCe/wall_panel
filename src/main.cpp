@@ -5,6 +5,7 @@
 #include <Wire.h>
 #include <Arduino_GFX_Library.h>
 #include <lvgl.h>
+#include "ble.h"
 #include "net.h"
 #include "power.h"
 #include "ui.h"
@@ -129,6 +130,7 @@ void setup()
   lv_indev_drv_register(&indevDrv);
 
   netBegin();
+  bleBegin();
   uiBegin();
   Serial.printf("ui up, psram free %u, heap free %u\n", ESP.getFreePsram(), ESP.getFreeHeap());
 }
@@ -151,6 +153,15 @@ static void serialCommands()
   else if (cmd.startsWith("page "))
   {
     uiShowPage(cmd.substring(5).toInt());
+  }
+  else if (cmd.startsWith("ble"))
+  {
+    int s = cmd.substring(3).toInt();
+    bleDump(s > 0 ? s : 10);
+  }
+  else if (cmd == "sensor")
+  {
+    uiShowSensor();
   }
   else if (cmd == "idle")
   {

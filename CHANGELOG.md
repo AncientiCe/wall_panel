@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Sensors page for Holyiot BLE temperature and humidity beacons: temperature, humidity, signal, last-heard time and a light bulb that stays lit for a minute after the beacon's button is pressed. The panel listens for 6 seconds every 30 seconds.
+- Tap a sensor for a 1 hour, 6 hour or 24 hour history graph, and rename it with the on-screen keyboard (names are saved on the panel). History is kept in memory only.
+
+### Changed
+
+- The calendar is switched off for now (`CALENDAR_ENABLED` in `src/net.h`): no fetching, no Calendar page and no "Up next" card on Home. The saved feed URL is kept.
+
 ## [0.1.0] - 2026-10-24
 
 First release, for the Guition ESP32-S3-4848S040 (4" 480x480 ST7701S touch panel).

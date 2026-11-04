@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "ble.h"
 #include "net.h"
 #include "power.h"
 #include <Arduino.h>
@@ -79,8 +80,11 @@ static lv_obj_t *bootStatus;
 enum Page
 {
   PAGE_HOME,
+#if CALENDAR_ENABLED
   PAGE_CALENDAR,
+#endif
   PAGE_WEATHER,
+  PAGE_SENSORS,
   PAGE_STARS,
   PAGE_CLOCK,
   PAGE_COUNT,
@@ -525,6 +529,9 @@ static void buildHome(lv_obj_t *t)
   lv_obj_align(homeWxSub, LV_ALIGN_BOTTOM_RIGHT, 0, -2);
 
   lv_obj_t *next = makeCard(t, 16, 282, 448, 182);
+#if !CALENDAR_ENABLED
+  lv_obj_add_flag(next, LV_OBJ_FLAG_HIDDEN);
+#endif
   makeCaption(next, "UP NEXT");
   for (int i = 0; i < NEXT_ROWS; i++)
   {
@@ -1174,6 +1181,407 @@ static void updateBoot(const NetStatus &st, bool timeKnown)
     fadeTo(scrMain, 500);
 }
 
+// ---- sensors ----
+
+static lv_obj_t *scrSensor, *scrName;
+
+struct SensRow
+{
+  lv_obj_t *card, *globe, *base, *name, *sub, *temp, *hum;
+};
+static SensRow sensRow[BLE_MAX_SENSORS];
+static SensorInfo sensInfo[BLE_MAX_SENSORS];
+static int sensCount = 0;
+static lv_obj_t *sensList, *sensEmpty;
+
+// detail screen
+static char detailMac[18];
+static int detailRange = 0; // 0 = 1 h, 1 = 6 h, 2 = 24 h
+static lv_obj_t *dtName, *dtNow, *chTemp, *chHum, *capTemp, *capHum, *axisLeft;
+static lv_chart_series_t *serTemp, *serHum;
+static lv_obj_t *taName, *lblNameFor;
+
+// LVGL's own printf has no floats, so temperatures are formatted by hand.
+static void fmtTenths(char *out, size_t len, int tenths)
+{
+  snprintf(out, len, "%s%d.%d", tenths < 0 ? "-" : "", abs(tenths) / 10, abs(tenths) % 10);
+}
+
+static void displayName(const SensorInfo &s, char *out, size_t len)
+{
+  if (s.name[0])
+    strlcpy(out, s.name, len);
+  else
+    snprintf(out, len, "Sensor %s", s.mac + 12); // last two bytes of the MAC
+}
+
+static void ageText(uint32_t ageS, char *out, size_t len)
+{
+  if (ageS == UINT32_MAX)
+    snprintf(out, len, "no signal yet");
+  else if (ageS < 10)
+    snprintf(out, len, "just now");
+  else if (ageS < 90)
+    snprintf(out, len, "%u s ago", (unsigned)ageS);
+  else if (ageS < 5400)
+    snprintf(out, len, "%u min ago", (unsigned)(ageS / 60));
+  else
+    snprintf(out, len, "%u h ago", (unsigned)(ageS / 3600));
+}
+
+// A small light bulb drawn from two shapes, so it needs no icon font.
+static void setBulb(const SensRow &r, bool on)
+{
+  lv_obj_set_style_bg_color(r.globe, lv_color_hex(on ? COL_SUN : 0xFFFFFF), 0);
+  lv_obj_set_style_bg_opa(r.globe, on ? LV_OPA_COVER : 40, 0);
+  lv_obj_set_style_shadow_width(r.globe, on ? 22 : 0, 0);
+  lv_obj_set_style_bg_color(r.base, lv_color_hex(on ? COL_SUN : 0xFFFFFF), 0);
+  lv_obj_set_style_bg_opa(r.base, on ? LV_OPA_COVER : 40, 0);
+}
+
+static void refreshDetail();
+
+static void sensorRowClicked(lv_event_t *e)
+{
+  int i = (int)(intptr_t)lv_event_get_user_data(e);
+  if (i >= sensCount)
+    return;
+  strlcpy(detailMac, sensInfo[i].mac, sizeof(detailMac));
+  refreshDetail();
+  fadeTo(scrSensor, 250);
+}
+
+static void buildSensors(lv_obj_t *t)
+{
+  lv_obj_t *title = makeLabel(t, &lv_font_montserrat_32, COL_TEXT, "Sensors");
+  lv_obj_set_pos(title, 22, 18);
+  lv_obj_t *sub = makeLabel(t, &font_text_16, COL_MUTED, "Read every 30 seconds. Tap one for its history.");
+  lv_obj_set_pos(sub, 24, 60);
+
+  sensList = lv_obj_create(t);
+  lv_obj_remove_style_all(sensList);
+  lv_obj_set_pos(sensList, 16, 92);
+  lv_obj_set_size(sensList, 448, 360);
+  lv_obj_set_flex_flow(sensList, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(sensList, 10, 0);
+  lv_obj_set_scroll_dir(sensList, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(sensList, LV_SCROLLBAR_MODE_OFF);
+
+  for (int i = 0; i < BLE_MAX_SENSORS; i++)
+  {
+    SensRow &r = sensRow[i];
+    r.card = makeCard(sensList, 0, 0, 448, 88);
+    lv_obj_add_flag(r.card, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(r.card, 50, LV_STATE_PRESSED);
+    lv_obj_add_event_cb(r.card, sensorRowClicked, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    lv_obj_add_flag(r.card, LV_OBJ_FLAG_HIDDEN);
+
+    r.globe = lv_obj_create(r.card);
+    lv_obj_remove_style_all(r.globe);
+    lv_obj_set_size(r.globe, 22, 22);
+    lv_obj_set_pos(r.globe, 1, 8);
+    lv_obj_set_style_radius(r.globe, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_shadow_color(r.globe, lv_color_hex(COL_SUN), 0);
+    lv_obj_set_style_shadow_opa(r.globe, 190, 0);
+    lv_obj_clear_flag(r.globe, LV_OBJ_FLAG_CLICKABLE);
+    r.base = lv_obj_create(r.card);
+    lv_obj_remove_style_all(r.base);
+    lv_obj_set_size(r.base, 12, 7);
+    lv_obj_set_pos(r.base, 6, 32);
+    lv_obj_set_style_radius(r.base, 3, 0);
+    lv_obj_clear_flag(r.base, LV_OBJ_FLAG_CLICKABLE);
+    setBulb(r, false);
+
+    r.name = makeLabel(r.card, &font_text_20, COL_TEXT, "");
+    lv_obj_set_pos(r.name, 40, 2);
+    oneLine(r.name, 196);
+    r.sub = makeLabel(r.card, &font_text_14, COL_MUTED, "");
+    lv_obj_set_pos(r.sub, 40, 34);
+    oneLine(r.sub, 196);
+    r.temp = makeLabel(r.card, &font_text_24, COL_TEXT, "");
+    lv_obj_set_pos(r.temp, 240, 0);
+    lv_obj_set_width(r.temp, 96);
+    lv_obj_set_style_text_align(r.temp, LV_TEXT_ALIGN_RIGHT, 0);
+    r.hum = makeLabel(r.card, &font_text_20, COL_ACCENT, "");
+    lv_obj_set_pos(r.hum, 344, 3);
+    lv_obj_set_width(r.hum, 76);
+    lv_obj_set_style_text_align(r.hum, LV_TEXT_ALIGN_RIGHT, 0);
+  }
+
+  sensEmpty = makeLabel(sensList, &font_text_18, COL_MUTED, "No sensors heard yet.\nKeep the beacon within a few metres of the panel.");
+  lv_obj_set_width(sensEmpty, 448);
+  lv_label_set_long_mode(sensEmpty, LV_LABEL_LONG_WRAP);
+}
+
+// ---- sensor detail ----
+
+static void styleChart(lv_obj_t *ch)
+{
+  lv_obj_set_style_bg_opa(ch, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(ch, 0, 0);
+  lv_obj_set_style_pad_all(ch, 0, 0);
+  lv_obj_set_style_line_color(ch, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_line_opa(ch, 30, LV_PART_MAIN);
+  lv_obj_set_style_size(ch, 0, LV_PART_INDICATOR);
+  lv_obj_set_style_line_width(ch, 3, LV_PART_ITEMS);
+  lv_chart_set_type(ch, LV_CHART_TYPE_LINE);
+  lv_chart_set_div_line_count(ch, 3, 0);
+}
+
+// One history chart: a card with a caption and the line.
+static lv_obj_t *makeHistoryCard(lv_obj_t *parent, lv_coord_t y, uint32_t colour, lv_obj_t **caption, lv_chart_series_t **series)
+{
+  lv_obj_t *card = makeCard(parent, 16, y, 448, 128);
+  *caption = makeLabel(card, &font_text_14, COL_MUTED, "");
+  lv_obj_set_pos(*caption, 0, -4);
+  lv_obj_t *ch = lv_chart_create(card);
+  lv_obj_set_pos(ch, 0, 22);
+  lv_obj_set_size(ch, 418, 78);
+  styleChart(ch);
+  *series = lv_chart_add_series(ch, lv_color_hex(colour), LV_CHART_AXIS_PRIMARY_Y);
+  return ch;
+}
+
+static void rangeChanged(lv_event_t *e)
+{
+  detailRange = lv_btnmatrix_get_selected_btn(lv_event_get_target(e));
+  refreshDetail();
+}
+
+static void renameClicked(lv_event_t *)
+{
+  for (int i = 0; i < sensCount; i++)
+    if (strcmp(sensInfo[i].mac, detailMac) == 0)
+      lv_textarea_set_text(taName, sensInfo[i].name);
+  lv_label_set_text_fmt(lblNameFor, "Name for sensor %s", detailMac);
+  lv_scr_load(scrName);
+}
+
+static void buildSensorDetail()
+{
+  scrSensor = makeScreen();
+
+  lv_obj_t *back = makeButton(scrSensor, LV_SYMBOL_LEFT " Back", 110, 44, [](lv_event_t *) { fadeTo(scrMain, 250); });
+  lv_obj_set_pos(back, 16, 12);
+  lv_obj_t *rename = makeButton(scrSensor, LV_SYMBOL_EDIT " Rename", 140, 44, renameClicked);
+  lv_obj_set_pos(rename, 324, 12);
+
+  dtName = makeLabel(scrSensor, &font_text_24, COL_TEXT, "");
+  lv_obj_set_pos(dtName, 22, 66);
+  oneLine(dtName, 436);
+  dtNow = makeLabel(scrSensor, &font_text_18, COL_MUTED, "");
+  lv_obj_set_pos(dtNow, 22, 100);
+  oneLine(dtNow, 436);
+
+  static const char *segMap[] = {"1 hour", "6 hours", "24 hours", ""};
+  lv_obj_t *seg = lv_btnmatrix_create(scrSensor);
+  lv_btnmatrix_set_map(seg, segMap);
+  lv_btnmatrix_set_btn_ctrl_all(seg, LV_BTNMATRIX_CTRL_CHECKABLE);
+  lv_btnmatrix_set_one_checked(seg, true);
+  lv_btnmatrix_set_btn_ctrl(seg, 0, LV_BTNMATRIX_CTRL_CHECKED);
+  lv_obj_set_size(seg, 340, 42);
+  lv_obj_align(seg, LV_ALIGN_TOP_MID, 0, 134);
+  lv_obj_set_style_bg_color(seg, lv_color_hex(0xFFFFFF), 0);
+  lv_obj_set_style_bg_opa(seg, 16, 0);
+  lv_obj_set_style_border_width(seg, 0, 0);
+  lv_obj_set_style_radius(seg, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_pad_all(seg, 4, 0);
+  lv_obj_set_style_pad_gap(seg, 4, 0);
+  lv_obj_set_style_bg_opa(seg, LV_OPA_TRANSP, LV_PART_ITEMS);
+  lv_obj_set_style_shadow_width(seg, 0, LV_PART_ITEMS);
+  lv_obj_set_style_radius(seg, LV_RADIUS_CIRCLE, LV_PART_ITEMS);
+  lv_obj_set_style_text_color(seg, lv_color_hex(COL_MUTED), LV_PART_ITEMS);
+  lv_obj_set_style_text_font(seg, &font_text_16, LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(seg, lv_color_hex(COL_ACCENT), LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_bg_opa(seg, LV_OPA_COVER, LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_set_style_text_color(seg, lv_color_hex(COL_BG_BOTTOM), LV_PART_ITEMS | LV_STATE_CHECKED);
+  lv_obj_add_event_cb(seg, rangeChanged, LV_EVENT_VALUE_CHANGED, nullptr);
+
+  chTemp = makeHistoryCard(scrSensor, 186, COL_SUN, &capTemp, &serTemp);
+  chHum = makeHistoryCard(scrSensor, 322, COL_ACCENT, &capHum, &serHum);
+  axisLeft = makeLabel(scrSensor, &font_text_14, COL_DIM, "");
+  lv_obj_set_pos(axisLeft, 30, 456);
+  lv_obj_t *axisRight = makeLabel(scrSensor, &font_text_14, COL_DIM, "now");
+  lv_obj_align(axisRight, LV_ALIGN_TOP_RIGHT, -46, 456);
+}
+
+// Fills one chart from tenths-of-a-unit history, averaging `bucket` samples
+// per point. Writes the caption with the range that is shown.
+static void fillChart(lv_obj_t *ch, lv_chart_series_t *ser, lv_obj_t *caption, const char *title, const char *unit,
+                      const int16_t *data, int count, int bucket, int minSpan)
+{
+  int points = count / bucket;
+  lv_chart_set_point_count(ch, points);
+  int lo = INT16_MAX, hi = INT16_MIN;
+  int valid = 0;
+  for (int p = 0; p < points; p++)
+  {
+    int sum = 0, n = 0;
+    for (int k = 0; k < bucket; k++)
+    {
+      int16_t v = data[p * bucket + k];
+      if (v != BLE_HIST_EMPTY)
+      {
+        sum += v;
+        n++;
+      }
+    }
+    if (n)
+    {
+      int v = sum / n;
+      lv_chart_set_value_by_id(ch, ser, p, v);
+      lo = min(lo, v);
+      hi = max(hi, v);
+      valid++;
+    }
+    else
+      lv_chart_set_value_by_id(ch, ser, p, LV_CHART_POINT_NONE);
+  }
+  if (!valid)
+  {
+    lv_chart_set_range(ch, LV_CHART_AXIS_PRIMARY_Y, 0, 100);
+    lv_label_set_text_fmt(caption, "%s: collecting data, one point every 2 minutes", title);
+  }
+  else
+  {
+    int span = max(hi - lo, minSpan);
+    int mid = (hi + lo) / 2;
+    lv_chart_set_range(ch, LV_CHART_AXIS_PRIMARY_Y, mid - span * 6 / 10, mid + span * 6 / 10);
+    lv_label_set_text_fmt(caption, "%s: %d.%d to %d.%d %s", title, lo / 10, lo % 10, hi / 10, hi % 10, unit);
+  }
+  lv_chart_refresh(ch);
+}
+
+static void refreshDetail()
+{
+  static int16_t temp[BLE_HIST_LEN], hum[BLE_HIST_LEN];
+  static const int counts[] = {30, 180, 720}; // 1 h, 6 h, 24 h of 2-minute samples
+  static const int buckets[] = {1, 4, 8};
+  static const char *labels[] = {"1 hour ago", "6 hours ago", "24 hours ago"};
+
+  const SensorInfo *si = nullptr;
+  for (int i = 0; i < sensCount; i++)
+    if (strcmp(sensInfo[i].mac, detailMac) == 0)
+      si = &sensInfo[i];
+  if (!si)
+    return;
+
+  char name[32], age[24];
+  displayName(*si, name, sizeof(name));
+  ageText(si->ageS, age, sizeof(age));
+  lv_label_set_text(dtName, name);
+  if (si->hasReading)
+  {
+    char tt[16];
+    fmtTenths(tt, sizeof(tt), (int)lroundf(si->temp * 10));
+    lv_label_set_text_fmt(dtNow, "%s °C    %d %%    %s", tt, (int)lroundf(si->humidity), age);
+  }
+  else
+    lv_label_set_text(dtNow, age);
+
+  int count = counts[detailRange];
+  if (bleGetHistory(detailMac, count, temp, hum) == count)
+  {
+    fillChart(chTemp, serTemp, capTemp, "Temperature", "°C", temp, count, buckets[detailRange], 20);
+    fillChart(chHum, serHum, capHum, "Humidity", "%", hum, count, buckets[detailRange], 100);
+  }
+  lv_label_set_text(axisLeft, labels[detailRange]);
+}
+
+// ---- rename ----
+
+static void nameKeyboardEvent(lv_event_t *e)
+{
+  lv_event_code_t code = lv_event_get_code(e);
+  if (code == LV_EVENT_READY)
+  {
+    bleSetName(detailMac, lv_textarea_get_text(taName));
+    sensCount = bleGetSensors(sensInfo, BLE_MAX_SENSORS);
+    refreshDetail();
+    lv_scr_load(scrSensor);
+  }
+  else if (code == LV_EVENT_CANCEL)
+    lv_scr_load(scrSensor);
+}
+
+static void buildName()
+{
+  scrName = makeScreen();
+  lblNameFor = makeLabel(scrName, &font_text_20, COL_TEXT, "");
+  lv_obj_set_pos(lblNameFor, 20, 14);
+  oneLine(lblNameFor, 440);
+
+  taName = lv_textarea_create(scrName);
+  lv_obj_set_pos(taName, 16, 46);
+  lv_obj_set_size(taName, 448, 56);
+  lv_textarea_set_one_line(taName, true);
+  lv_textarea_set_max_length(taName, 23);
+  lv_textarea_set_placeholder_text(taName, "e.g. Living room");
+
+  lv_obj_t *kb = lv_keyboard_create(scrName);
+  lv_obj_set_size(kb, 480, 300);
+  lv_obj_align(kb, LV_ALIGN_BOTTOM_MID, 0, 0);
+  lv_keyboard_set_textarea(kb, taName);
+  lv_obj_add_event_cb(kb, nameKeyboardEvent, LV_EVENT_ALL, nullptr);
+}
+
+static void updateSensors()
+{
+  static uint32_t last = 0, lastDetail = 0;
+  if (last && millis() - last < 2000)
+    return;
+  last = millis();
+
+  sensCount = bleGetSensors(sensInfo, BLE_MAX_SENSORS);
+  for (int i = 0; i < BLE_MAX_SENSORS; i++)
+  {
+    SensRow &r = sensRow[i];
+    if (i >= sensCount)
+    {
+      lv_obj_add_flag(r.card, LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    const SensorInfo &s = sensInfo[i];
+    lv_obj_clear_flag(r.card, LV_OBJ_FLAG_HIDDEN);
+    char name[32], age[24];
+    displayName(s, name, sizeof(name));
+    ageText(s.ageS, age, sizeof(age));
+    bool stale = s.ageS == UINT32_MAX || s.ageS > 150;
+    lv_label_set_text(r.name, name);
+    lv_obj_set_style_text_color(r.name, lv_color_hex(s.name[0] ? COL_TEXT : COL_MUTED), 0);
+    if (s.hasReading && s.ageS != UINT32_MAX)
+      lv_label_set_text_fmt(r.sub, "%s, %d dBm", age, s.rssi);
+    else
+      lv_label_set_text(r.sub, age);
+    if (s.hasReading)
+    {
+      char tt[16];
+      fmtTenths(tt, sizeof(tt), (int)lroundf(s.temp * 10));
+      lv_label_set_text_fmt(r.temp, "%s°", tt);
+      lv_label_set_text_fmt(r.hum, "%d%%", (int)lroundf(s.humidity));
+    }
+    else
+    {
+      lv_label_set_text(r.temp, "--");
+      lv_label_set_text(r.hum, "--");
+    }
+    lv_obj_set_style_text_color(r.temp, lv_color_hex(stale ? COL_DIM : COL_TEXT), 0);
+    lv_obj_set_style_text_color(r.hum, lv_color_hex(stale ? COL_DIM : COL_ACCENT), 0);
+    setBulb(r, s.pressedRecently);
+  }
+  if (sensCount)
+    lv_obj_add_flag(sensEmpty, LV_OBJ_FLAG_HIDDEN);
+  else
+    lv_obj_clear_flag(sensEmpty, LV_OBJ_FLAG_HIDDEN);
+
+  // The open detail screen follows the data, and redraws its graph every 30 s.
+  if (lv_scr_act() == scrSensor && millis() - lastDetail > 30000)
+  {
+    lastDetail = millis();
+    refreshDetail();
+  }
+}
+
 // ---- page dots ----
 
 static void pageChanged(lv_event_t *)
@@ -1204,8 +1612,11 @@ static void buildMain()
     lv_obj_clear_flag(page[i], LV_OBJ_FLAG_SCROLLABLE);
   }
   buildHome(page[PAGE_HOME]);
+#if CALENDAR_ENABLED
   buildCalendar(page[PAGE_CALENDAR]);
+#endif
   buildWeather(page[PAGE_WEATHER]);
+  buildSensors(page[PAGE_SENSORS]);
   buildStars(page[PAGE_STARS]);
   buildClock(page[PAGE_CLOCK]);
 
@@ -1449,6 +1860,16 @@ void uiShowPage(int page)
 
 void uiShowIdle() { lv_scr_load(scrIdle); }
 
+void uiShowSensor()
+{
+  sensCount = bleGetSensors(sensInfo, BLE_MAX_SENSORS);
+  if (!sensCount)
+    return;
+  strlcpy(detailMac, sensInfo[0].mac, sizeof(detailMac));
+  refreshDetail();
+  lv_scr_load(scrSensor);
+}
+
 void uiBegin()
 {
   calEvents = (CalEvent *)ps_malloc(sizeof(CalEvent) * MAX_EVENTS);
@@ -1458,6 +1879,8 @@ void uiBegin()
   buildIdle();
   buildWifi();
   buildPass();
+  buildSensorDetail();
+  buildName();
   buildBanner();
   lv_scr_load(scrBoot);
 }
@@ -1532,7 +1955,9 @@ void uiUpdate()
       lastDay = t.tm_yday;
       calSel = today();
     }
+#if CALENDAR_ENABLED
     renderCalendar();
+#endif
   }
 
   static uint32_t seenHoroscopes = UINT32_MAX;
@@ -1552,6 +1977,7 @@ void uiUpdate()
     lv_meter_set_indicator_value(meter, needleSec, t.tm_sec);
   }
 
+  updateSensors();
   updateWifi(st);
   updateBoot(st, timeKnown);
   if (timeKnown)

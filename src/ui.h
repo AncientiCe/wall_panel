@@ -7,3 +7,4 @@ void uiUpdate();
 // Serial debug helpers: show page 0-3, or the idle (logo) screen.
 void uiShowPage(int page);
 void uiShowIdle();
+void uiShowSensor(); // debug: open the first sensor's history
