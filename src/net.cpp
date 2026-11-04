@@ -75,7 +75,7 @@ static void loadSettings()
   s.nightAtSunset = prefs.getBool("nightSunset", true);
   s.nightStart = prefs.getInt("nightStart", 20 * 60 + 30);
   s.nightEnd = prefs.getInt("nightEnd", 6 * 60 + 30);
-  s.nightBrightness = constrain(prefs.getInt("nightBright", 10), 1, 100);
+  s.nightBrightness = constrain(prefs.getInt("nightBright", 80), 1, 100);
   portENTER_CRITICAL(&mux);
   settings = s;
   portEXIT_CRITICAL(&mux);
