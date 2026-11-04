@@ -567,7 +567,7 @@ static void handleRoot()
       "<input type=text name=nightEnd size=5 value=" + hhmm(s.nightEnd) + ">"
       "<small>HH:MM. A fixed start equal to the end turns night mode off.</small>"
       "<label>Night brightness (%)</label>"
-      "<input type=number name=nightBright min=70 max=100 value=" + String(s.nightBrightness) + ">"
+      "<input type=number name=nightBright min=1 max=100 value=" + String(s.nightBrightness) + ">"
       "<small>Backlight while idle at night. 100 is full daytime brightness.</small>"
       "<br><button>Save</button></form></body></html>";
   server.send(200, "text/html", page);
@@ -876,7 +876,7 @@ void netBegin()
 void netSetNightBrightness(int pct)
 {
   portENTER_CRITICAL(&mux);
-  settings.nightBrightness = constrain(pct, 70, 100);
+  settings.nightBrightness = constrain(pct, 1, 100);
   portEXIT_CRITICAL(&mux);
 }
 

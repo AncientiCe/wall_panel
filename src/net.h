@@ -107,7 +107,7 @@ struct Settings
   bool nightAtSunset;  // start night mode at sunset instead of nightStart
   int nightStart;     // minutes after midnight
   int nightEnd;
-  int nightBrightness; // percent, 70-100, backlight while idle at night (RAM only)
+  int nightBrightness; // percent, 1-100, backlight while idle at night (RAM only)
 };
 
 void netBegin();
