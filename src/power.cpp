@@ -6,13 +6,8 @@
 #define BL_CHANNEL 0
 
 #define LEVEL_DAY 255
-#define LEVEL_NIGHT 40
-#define NIGHT_AWAKE_MS 30000
 
 static int level = -1;
-static bool screenOff = false;
-static bool swallowing = false;
-static uint32_t lastTouch = 0;
 
 static void setLevel(int v)
 {
@@ -30,22 +25,10 @@ void powerBegin()
   setLevel(LEVEL_DAY);
 }
 
+// The screen never goes fully dark, so a touch always goes straight through.
 bool powerOnTouch(bool pressed)
 {
-  if (pressed)
-    lastTouch = millis();
-  if (screenOff && pressed)
-  {
-    screenOff = false;
-    swallowing = true;
-    setLevel(LEVEL_NIGHT);
-  }
-  if (swallowing)
-  {
-    if (!pressed)
-      swallowing = false;
-    return true;
-  }
+  (void)pressed;
   return false;
 }
 
@@ -57,19 +40,10 @@ void powerUpdate(bool night)
   prevNight = night;
   if (!night)
   {
-    screenOff = false;
     setLevel(LEVEL_DAY);
+    return;
   }
-  else if (lastTouch && millis() - lastTouch < NIGHT_AWAKE_MS)
-  {
-    screenOff = false;
-    setLevel(LEVEL_NIGHT);
-  }
-  else
-  {
-    Settings s;
-    netGetSettings(s);
-    screenOff = true;
-    setLevel(max(1, s.nightBrightness * 255 / 100));
-  }
+  Settings s;
+  netGetSettings(s);
+  setLevel(max(1, s.nightBrightness * 255 / 100));
 }
