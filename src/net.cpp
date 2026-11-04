@@ -75,7 +75,8 @@ static void loadSettings()
   s.nightAtSunset = prefs.getBool("nightSunset", true);
   s.nightStart = prefs.getInt("nightStart", 20 * 60 + 30);
   s.nightEnd = prefs.getInt("nightEnd", 6 * 60 + 30);
-  s.nightBrightness = constrain(prefs.getInt("nightBright", 80), 80, 100);
+  // Not saved: a change holds until the next sunrise/sunset, then resets to 80.
+  s.nightBrightness = settings.nightBrightness ? settings.nightBrightness : 80;
   portENTER_CRITICAL(&mux);
   settings = s;
   portEXIT_CRITICAL(&mux);
@@ -594,8 +595,8 @@ static void handleSave()
   prefs.putBool("nightSunset", server.arg("nightMode") != "fixed");
   prefs.putInt("nightStart", parseHhmm(server.arg("nightStart"), s.nightStart));
   prefs.putInt("nightEnd", parseHhmm(server.arg("nightEnd"), s.nightEnd));
-  prefs.putInt("nightBright", constrain(server.arg("nightBright").toInt(), 80, 100));
   loadSettings();
+  netSetNightBrightness(server.arg("nightBright").toInt());
 
   Cmd cmd = {CmdType::RefreshCalendar};
   xQueueSend(cmdQueue, &cmd, 0);
@@ -870,6 +871,13 @@ void netBegin()
   status.calendar = CALENDAR_ENABLED && settings.calendarUrl[0] ? CalState::Loading : CalState::NotSet;
   cmdQueue = xQueueCreate(6, sizeof(Cmd));
   xTaskCreatePinnedToCore(netTask, "net", 12288, nullptr, 1, nullptr, 0);
+}
+
+void netSetNightBrightness(int pct)
+{
+  portENTER_CRITICAL(&mux);
+  settings.nightBrightness = constrain(pct, 80, 100);
+  portEXIT_CRITICAL(&mux);
 }
 
 void netGetSettings(Settings &out)
