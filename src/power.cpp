@@ -20,6 +20,7 @@ static void setLevel(int v)
     return;
   level = v;
   ledcWrite(BL_CHANNEL, v);
+  Serial.printf("backlight %d\n", v);
 }
 
 void powerBegin()
