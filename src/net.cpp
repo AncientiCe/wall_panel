@@ -76,7 +76,7 @@ static void loadSettings()
   s.nightStart = prefs.getInt("nightStart", 20 * 60 + 30);
   s.nightEnd = prefs.getInt("nightEnd", 6 * 60 + 30);
   // Not saved: a change holds until the next sunrise/sunset, then resets to 80.
-  s.nightBrightness = settings.nightBrightness ? settings.nightBrightness : 70;
+  s.nightBrightness = settings.nightBrightness ? settings.nightBrightness : 60;
   portENTER_CRITICAL(&mux);
   settings = s;
   portEXIT_CRITICAL(&mux);
@@ -566,9 +566,9 @@ static void handleRoot()
       "<label>Night mode ends</label>"
       "<input type=text name=nightEnd size=5 value=" + hhmm(s.nightEnd) + ">"
       "<small>HH:MM. A fixed start equal to the end turns night mode off.</small>"
-      "<label>Night brightness (%)</label>"
-      "<input type=number name=nightBright min=1 max=100 value=" + String(s.nightBrightness) + ">"
-      "<small>Backlight while idle at night. 100 is full daytime brightness.</small>"
+      "<label>Night brightness</label>"
+      "<input type=range name=nightBright min=60 max=100 value=" + String(s.nightBrightness) + ">"
+      "<small>Low to high. Holds until the next sunrise or sunset.</small>"
       "<br><button>Save</button></form></body></html>";
   server.send(200, "text/html", page);
 }
@@ -876,7 +876,7 @@ void netBegin()
 void netSetNightBrightness(int pct)
 {
   portENTER_CRITICAL(&mux);
-  settings.nightBrightness = constrain(pct, 1, 100);
+  settings.nightBrightness = constrain(pct, 60, 100);
   portEXIT_CRITICAL(&mux);
 }
 

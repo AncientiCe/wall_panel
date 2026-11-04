@@ -36,7 +36,7 @@ void powerUpdate(bool night)
 {
   static int prevNight = -1;
   if (prevNight != -1 && prevNight != (int)night)
-    netSetNightBrightness(70); // sunset/sunrise puts it back to 70%
+    netSetNightBrightness(60); // sunset/sunrise puts it back to 60%
   prevNight = night;
   if (!night)
   {

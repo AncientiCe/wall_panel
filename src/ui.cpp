@@ -1746,16 +1746,13 @@ static void buildMain()
 
 // ---- Wi-Fi setup ----
 
-static lv_obj_t *sliderNight, *lblNight;
-
-static void showNightPct(int pct) { lv_label_set_text_fmt(lblNight, "Night brightness  %d%%", pct); }
+static lv_obj_t *sliderNight;
 
 static void openWifi()
 {
   Settings cur;
   netGetSettings(cur);
   lv_slider_set_value(sliderNight, cur.nightBrightness, LV_ANIM_OFF);
-  showNightPct(cur.nightBrightness);
   lv_scr_load(scrWifi);
   netRequestScan();
 }
@@ -1827,36 +1824,35 @@ static void buildWifi()
 
   lv_obj_t *title = makeLabel(scrWifi, &lv_font_montserrat_32, COL_TEXT, "Settings");
   lv_obj_set_pos(title, 22, 18);
+  lv_obj_t *lblBright = makeLabel(scrWifi, &font_text_16, COL_MUTED, "Brightness");
+  lv_obj_set_pos(lblBright, 24, 62);
+  sliderNight = lv_slider_create(scrWifi);
+  lv_obj_set_pos(sliderNight, 32, 98);
+  lv_obj_set_size(sliderNight, 416, 14);
+  lv_slider_set_range(sliderNight, 60, 100);
+  lv_slider_set_value(sliderNight, 60, LV_ANIM_OFF);
+  lv_obj_set_ext_click_area(sliderNight, 16);
+  lv_obj_add_event_cb(sliderNight, [](lv_event_t *e) { netSetNightBrightness(lv_slider_get_value(lv_event_get_target(e))); }, LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_t *lblLow = makeLabel(scrWifi, &font_text_14, COL_DIM, "Low");
+  lv_obj_set_pos(lblLow, 32, 120);
+  lv_obj_t *lblHigh = makeLabel(scrWifi, &font_text_14, COL_DIM, "High");
+  lv_obj_align(lblHigh, LV_ALIGN_TOP_RIGHT, -32, 120);
+
   lblWifiStatus = makeLabel(scrWifi, &font_text_16, COL_MUTED, "");
-  lv_obj_set_pos(lblWifiStatus, 24, 62);
+  lv_obj_set_pos(lblWifiStatus, 24, 150);
   oneLine(lblWifiStatus, 432);
   
 
   lv_obj_t *btnScan = makeButton(scrWifi, LV_SYMBOL_REFRESH " Scan", 140, 50, [](lv_event_t *) { netRequestScan(); });
-  lv_obj_set_pos(btnScan, 16, 94);
+  lv_obj_set_pos(btnScan, 16, 178);
   btnForget = makeButton(scrWifi, "Forget", 140, 50, [](lv_event_t *) { netForget(); });
-  lv_obj_set_pos(btnForget, 170, 94);
+  lv_obj_set_pos(btnForget, 170, 178);
   lv_obj_t *btnBack = makeButton(scrWifi, LV_SYMBOL_LEFT " Back", 140, 50, [](lv_event_t *) { showHome(); });
-  lv_obj_set_pos(btnBack, 324, 94);
-
-  lblNight = makeLabel(scrWifi, &font_text_16, COL_MUTED, "");
-  lv_obj_set_pos(lblNight, 24, 156);
-  sliderNight = lv_slider_create(scrWifi);
-  lv_obj_set_pos(sliderNight, 32, 192);
-  lv_obj_set_size(sliderNight, 416, 14);
-  lv_slider_set_range(sliderNight, 70, 100);
-  lv_slider_set_value(sliderNight, 70, LV_ANIM_OFF);
-  showNightPct(70);
-  lv_obj_set_ext_click_area(sliderNight, 16);
-  lv_obj_add_event_cb(sliderNight, [](lv_event_t *e) {
-    int v = lv_slider_get_value(lv_event_get_target(e));
-    showNightPct(v);
-    netSetNightBrightness(v);
-  }, LV_EVENT_VALUE_CHANGED, nullptr);
+  lv_obj_set_pos(btnBack, 324, 178);
 
   listNets = lv_list_create(scrWifi);
-  lv_obj_set_pos(listNets, 16, 228);
-  lv_obj_set_size(listNets, 448, 236);
+  lv_obj_set_pos(listNets, 16, 236);
+  lv_obj_set_size(listNets, 448, 228);
   lv_obj_set_style_bg_color(listNets, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_bg_opa(listNets, 16, 0);
   lv_obj_set_style_border_width(listNets, 0, 0);
