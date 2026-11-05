@@ -6,6 +6,7 @@
 #include <WebServer.h>
 #include <WiFiClientSecure.h>
 #include <ESPmDNS.h>
+#include <ArduinoOTA.h>
 #include <time.h>
 
 #if __has_include("secrets.h")
@@ -714,6 +715,7 @@ static void netTask(void *)
   uint32_t lastCalendar = 0;
   int horoscopeDay = -1; // local day of year last fetched
   bool serverStarted = false;
+  bool otaStarted = false;
 
   for (;;)
   {
@@ -757,7 +759,11 @@ static void netTask(void *)
       }
     }
     if (serverStarted)
+    {
       server.handleClient();
+      if (otaStarted)
+        ArduinoOTA.handle();
+    }
 
     bool connected = WiFi.status() == WL_CONNECTED;
     if (!pendingSsid.isEmpty())
@@ -799,6 +805,16 @@ static void netTask(void *)
           server.on("/", HTTP_GET, handleRoot);
           server.on("/save", HTTP_POST, handleSave);
           server.begin();
+#ifdef OTA_PASSWORD // never run OTA unauthenticated
+          ArduinoOTA.setHostname("wall-panel");
+          ArduinoOTA.setMdnsEnabled(false); // MDNS.begin() above already advertises the host
+          ArduinoOTA.onStart([]() { Serial.println("ota: start"); });
+          ArduinoOTA.onEnd([]() { Serial.println("ota: done, rebooting"); });
+          ArduinoOTA.onError([](ota_error_t e) { Serial.printf("ota: error %u\n", (unsigned)e); });
+          ArduinoOTA.setPassword(OTA_PASSWORD);
+          ArduinoOTA.begin();
+          otaStarted = true;
+#endif
           serverStarted = true;
         }
       }
